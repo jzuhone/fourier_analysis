@@ -45,8 +45,8 @@ class FFTArray:
 
 class FourierAnalysis:
     def __init__(self, width, ddims):
-        self.width = np.array(width)
-        self.ddims = np.array(ddims, dtype="int")
+        self.width = np.atleast_1d(width)
+        self.ddims = np.atleast_1d(ddims).astype("int")
         self.delta = self.width / self.ddims
         self.ndims = self.ddims.size
         self.shape = tuple(np.insert(self.ddims, 0, self.ndims))

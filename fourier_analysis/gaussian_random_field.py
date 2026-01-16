@@ -19,6 +19,18 @@ def make_jit_power_spec(power_spec, **njit_kwargs):
 
 
 @njit(parallel=True, fastmath=True)
+def compute_pspec_1d(kx, nx, power_spec):
+    sigma = np.zeros(nx)
+
+    for i in prange(nx):
+        if kx[i] == 0.0:
+            sigma[i] = 0.0
+        else:
+            sigma[i] = np.sqrt(power_spec(kx[i]))
+
+    return sigma
+
+@njit(parallel=True, fastmath=True)
 def compute_pspec_2d(kx, ky, nx, ny, power_spec):
     sigma = np.zeros((nx, ny))
 
@@ -50,16 +62,14 @@ def compute_pspec_3d(kx, ky, kz, nx, ny, nz, power_spec):
 
 
 @njit(fastmath=True)
-def enforce_hermitian_symmetry_3d(f_hat):
-    nx, ny, nz = f_hat.shape
-    for i in range(nx):
-        for j in range(ny):
-            for k in range(nz // 2 + 1):  # only loop over half
-                i_, j_, k_ = (-i) % nx, (-j) % ny, (-k) % nz
-                if (i, j, k) != (i_, j_, k_):
-                    f_hat[i_, j_, k_] = np.conj(f_hat[i, j, k])
-                else:
-                    f_hat[i, j, k] = f_hat[i, j, k].real  # ensure real on Nyquist
+def enforce_hermitian_symmetry_1d(f_hat):
+    nx = f_hat.shape[0]
+    for i in range(nx // 2 + 1): # only loop over half
+        i_ = (-i) % nx
+        if i != i_:
+            f_hat[i_] = np.conj(f_hat[i])
+        else:
+            f_hat[i] = complex(f_hat[i].real, 0.0)  # ensure real on Nyquist
     return f_hat
 
 
@@ -72,7 +82,21 @@ def enforce_hermitian_symmetry_2d(f_hat):
             if (i, j) != (i_, j_):
                 f_hat[i_, j_] = np.conj(f_hat[i, j])
             else:
-                f_hat[i, j] = f_hat[i, j].real  # ensure real on Nyquist
+                f_hat[i, j] = complex(f_hat[i, j].real, 0.0)  # ensure real on Nyquist
+    return f_hat
+
+
+@njit(fastmath=True)
+def enforce_hermitian_symmetry_3d(f_hat):
+    nx, ny, nz = f_hat.shape
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz // 2 + 1):  # only loop over half
+                i_, j_, k_ = (-i) % nx, (-j) % ny, (-k) % nz
+                if (i, j, k) != (i_, j_, k_):
+                    f_hat[i_, j_, k_] = np.conj(f_hat[i, j, k])
+                else:
+                    f_hat[i, j, k] = complex(f_hat[i, j, k].real, 0.0)  # ensure real on Nyquist
     return f_hat
 
 
@@ -96,24 +120,28 @@ def make_gaussian_random_field(
 
     prng = np.random.default_rng(seed=seed)
 
-    left_edge = np.array(left_edge).astype("float64")
-    right_edge = np.array(right_edge).astype("float64")
-    ddims = np.array(ddims).astype("int")
+    left_edge = np.atleast_1d(left_edge).astype("float64")
+    right_edge = np.atleast_1d(right_edge).astype("float64")
+    ddims = np.atleast_1d(ddims).astype("int")
     width = right_edge - left_edge
     deltas = width / ddims
     ndim = left_edge.size
-    if ndim == 2:
+    if ndim == 1:
+        dx = deltas[0]
+        nx = ddims[0]
+    elif ndim == 2:
         dx, dy = deltas
         nx, ny = ddims
     else:
         dx, dy, dz = deltas
         nx, ny, nz = ddims
     kx = np.arange(nx, dtype="float64")
-    ky = np.arange(ny, dtype="float64")
     kx[kx > nx // 2] = kx[kx > nx // 2] - nx
-    ky[ky > ny // 2] = ky[ky > ny // 2] - ny
     kx /= nx * dx    
-    ky /= ny * dy
+    if ndim > 1:
+        ky = np.arange(ny, dtype="float64")
+        ky[ky > ny // 2] = ky[ky > ny // 2] - ny
+        ky /= ny * dy
     if ndim == 3:
         kz = np.arange(nz, dtype="float64")
         kz[kz > nz // 2] = kz[kz > nz // 2] - nz
@@ -124,7 +152,9 @@ def make_gaussian_random_field(
     v_real = prng.normal(size=ddims)
     v_imag = prng.normal(size=ddims)
         
-    if ndim == 2:
+    if ndim == 1:
+        sigma = compute_pspec_1d(kx, nx, pspec)
+    elif ndim == 2:
         sigma = compute_pspec_2d(kx, ky, nx, ny, pspec)
     else:
         sigma = compute_pspec_3d(kx, ky, kz, nx, ny, nz, pspec) 
@@ -136,7 +166,9 @@ def make_gaussian_random_field(
     v = v_real + 1j * v_imag
     v /= sqrt2
 
-    if ndim == 2:
+    if ndim == 1:
+        v = enforce_hermitian_symmetry_1d(v)
+    elif ndim == 2:
         v = enforce_hermitian_symmetry_2d(v)
     else:
         v = enforce_hermitian_symmetry_3d(v)
