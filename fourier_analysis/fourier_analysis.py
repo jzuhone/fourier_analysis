@@ -108,9 +108,9 @@ class FourierAnalysis:
 
     def generate_fd_wvs(self, diff_type):
         if diff_type == "central":
-            diff_func = lambda k, dx: np.sin(k * dx) / dx
+            diff_func = lambda k, dx: np.sin(2.0 * np.pi * k * dx) / dx
         elif diff_type == "forward":
-            diff_func = lambda k, dx: -1j * np.exp(1j * k * dx - 1.0) / dx
+            diff_func = lambda k, dx: -1j * np.exp(2.0 * np.pi * 1j * k * dx - 1.0) / dx
         else:
             raise NotImplementedError()
         kd = diff_func(
