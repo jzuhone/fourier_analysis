@@ -2,7 +2,7 @@ import numpy as np
 from scipy.fft import fftfreq, fftshift, fftn
 
 
-def window_data(data, filter_function="tukey"):
+def window_data(data, filter_function="tukey", **kwargs):
     """
     https://stackoverflow.com/questions/27345861/extending-1d-function-across-3-dimensions-for-data-windowing
 
@@ -12,10 +12,11 @@ def window_data(data, filter_function="tukey"):
     Parameters
     ----------
     data : ndarray
-           Input data to be windowed, modified in place.
-    filter_function : 1D window generation function
-           Function should accept one argument: the window length.
-           Example: scipy.signal.hamming
+        Input data to be windowed, modified in place.
+    filter_function : str
+        Function can accept one argument: the window length, but
+        all other keyword arguments are passed to the function.
+        Default: tukey
     """
     import scipy.signal.windows
 
@@ -26,7 +27,7 @@ def window_data(data, filter_function="tukey"):
             1,
         ] * data.ndim
         filter_shape[axis] = axis_size
-        window = filter_function(axis_size).reshape(filter_shape)
+        window = filter_function(axis_size, **kwargs).reshape(filter_shape)
         # scale the window intensities to maintain image intensity
         np.power(window, (1.0 / data.ndim), out=window)
         data *= window
