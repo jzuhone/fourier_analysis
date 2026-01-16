@@ -10,15 +10,16 @@ from scipy.integrate import quad
 sqrt2 = 2.0**0.5
 
 
-@njit
-def power_spec(k, k0, k1, alpha):
-    Pk = (1.0 + (k / k1) ** 2) ** (0.25 * alpha) * np.exp(-0.5 * (k / k0) ** 2)
-    return Pk
+def make_power_spec(user_func, **njit_kwargs):
+    user_jit = njit(**njit_kwargs)(user_func)
+    @njit
+    def power_spec(k):
+        return user_jit(k)  # user_func must be jittable!
+    return power_spec
 
 
 @njit(parallel=True, fastmath=True)
-def compute_pspec(kx, ky, kz, k0, k1, alpha, ddims):
-    nx, ny, nz = ddims
+def compute_pspec(kx, ky, kz, nx, ny, nz, power_spec):
     sigma = np.zeros((nx, ny, nz))
 
     for i in prange(nx):
@@ -28,7 +29,7 @@ def compute_pspec(kx, ky, kz, k0, k1, alpha, ddims):
                 if kk == 0.0:
                     sigma[i, j, k] = 0.0
                 else:
-                    sigma[i, j, k] = power_spec(kk, k0, k1, alpha)
+                    sigma[i, j, k] = power_spec(kk)
 
     return sigma
 
@@ -48,7 +49,7 @@ def enforce_hermitian_symmetry(f_hat):
 
 
 def make_gaussian_random_field(
-    left_edge, right_edge, ddims, l_min, l_max, alpha, f_rms, seed=None
+    left_edge, right_edge, ddims, power_spec, f_rms, seed=None
 ):
     """
     Parameters
@@ -90,20 +91,18 @@ def make_gaussian_random_field(
     ky /= ny * dy
     kz /= nz * dz
 
-    k0 = 1.0 / l_min
-    k1 = 1.0 / l_max
-    alpha = alpha
+    pspec = make_power_spec(power_spec)
 
     def Ek(k):
-        sigma = power_spec(k, k0, k1, alpha)
+        sigma = pspec(k)
         return 4.0 * np.pi * sigma * sigma * k * k
 
     Cn = f_rms**2 / quad(Ek, 0.0, 100.0, points=(0.1, 1.0, 10.0))[0] / np.prod(width)
 
     v_real = prng.normal(size=ddims)
     v_imag = prng.normal(size=ddims)
-
-    sigma = compute_pspec(kx, ky, kz, k0, k1, alpha, ddims) * np.sqrt(Cn)
+        
+    sigma = compute_pspec(kx, ky, kz, nx, ny, nz, pspec) * np.sqrt(Cn)
     v_real *= sigma
     v_imag *= sigma
 

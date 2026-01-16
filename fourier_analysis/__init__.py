@@ -1,2 +1,3 @@
 from fourier_analysis.fourier_analysis import FourierAnalysis, window_data
 from fourier_analysis.gaussian_random_field import make_gaussian_random_field
+from fourier_analysis.power_spectra import plaw_cutoffs
