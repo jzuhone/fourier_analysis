@@ -6,6 +6,8 @@ class PowerSpectrum:
     def __init__(self, power_spec_func, dims=3):
         self.func = power_spec_func
         self.norm = 1.0
+        if dims not in [2, 3]:
+            raise ValueError("Invalid number of dimensions! Must be 2 or 3.")
         self.dims = dims
 
     def __call__(self, k):
